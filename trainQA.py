@@ -3,8 +3,7 @@ from transformers import (
     AutoTokenizer, 
     AutoModelForQuestionAnswering, 
     TrainingArguments, 
-    Trainer, 
-    Seq2SeqTrainer,
+    Trainer, Seq2SeqTrainer, 
     AutoConfig,
     DefaultDataCollator,
     DataCollatorForSeq2Seq,
@@ -21,20 +20,19 @@ OUTPUT_DIR = "result"
 # Define training arguments
 training_args = TrainingArguments(
     output_dir=OUTPUT_DIR,
-    eval_strategy="epoch",
     learning_rate=2e-5,
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
     num_train_epochs=3,
     weight_decay=0.01,
-    push_to_hub=False,
-    logging_dir='./logs', 
-    logging_steps=20,
-    evaluation_strategy="steps",
-    load_best_model_at_end=True,
-    remove_unused_columns=False,
+    seed=42,
+    #push_to_hub=False,
+    #logging_dir='./logs', 
+    #logging_steps=20,
+    #evaluation_strategy="steps",
+    #load_best_model_at_end=True,
+    #remove_unused_columns=False,
 )
-
 
 generation_config = GenerationConfig(
     max_length=128,            
@@ -48,6 +46,18 @@ generation_config = GenerationConfig(
     repetition_penalty=1.2,    # 避免重複生成相同的短語
     length_penalty=1.0         # 長度懲罰，較高值傾向於生成更長的句子
 )
+
+training_args.generation_config = generation_config
+
+
+gen_kwargs = {
+    "max_length": 1024,
+    "num_beams": 5,
+    "do_sample": True,
+    "temperature": 1,
+    "top_k": 50,
+    "top_p": 0.9,
+}
 
 
 # Load data
@@ -66,10 +76,9 @@ dataset_dict = DatasetDict({
 
 # Tokenizer and Model Configuration
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_PATH)
-config = AutoConfig.from_pretrained(BASE_MODEL_PATH)
+config = AutoConfig.from_pretrained(BASE_MODEL_PATH, **gen_kwargs)
 #config.hidden_dropout_prob = 0.2
 model = AutoModelForQuestionAnswering.from_pretrained(BASE_MODEL_PATH, config=config)
-model.generation_config = generation_config
 
 # Data preproccess: Preprocessing function
 column_names = dataset_dict["train"].column_names
@@ -91,7 +100,6 @@ tokenized_datasets = dataset_dict.map(
     desc="Running tokenizer on dataset",
     )
 
-########## TBD
 # Data Collator for Causal Language Modeling
 data_collator = DefaultDataCollator()
 
@@ -101,7 +109,7 @@ metric = evaluate.load("squad")
 # Initialize Trainer
 trainer = Seq2SeqTrainer(
     model=model,
-    args=[training_args,generation_config],
+    args=training_args,
     train_dataset=dataset_dict["train"],
     eval_dataset=dataset_dict["validation"],
     tokenizer=tokenizer,
@@ -110,6 +118,14 @@ trainer = Seq2SeqTrainer(
 )
 
 # Start Training
-trainer.train()
+train_result = trainer.train()
 
+# Save train result
 print(trainer.state.log_history)
+trainer.save_model()  # Saves the tokenizer too for easy upload
+
+metrics = train_result.metrics
+trainer.log_metrics("train", metrics)
+
+trainer.save_metrics("train", metrics)
+trainer.save_state()
