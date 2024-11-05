@@ -104,7 +104,7 @@ tokenized_datasets = dataset_dict.map(
 data_collator = DefaultDataCollator()
 
 # Evaluation metric
-metric = evaluate.load("squad")
+metric = evaluate.load("accuracy")
 
 # Initialize Trainer
 trainer = Seq2SeqTrainer(
