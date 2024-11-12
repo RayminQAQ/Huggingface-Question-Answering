@@ -5,7 +5,7 @@ from transformers import (
     Seq2SeqTrainingArguments,
     Seq2SeqTrainer,
     DataCollatorForSeq2Seq,
-    AutoConfig, GenerationConfig
+    AutoConfig,
 )
 import evaluate
 from datasets import DatasetDict
@@ -14,48 +14,25 @@ import numpy as np
 
 # Parameters
 BASE_MODEL_PATH = "fnlp/bart-base-chinese"  # Add your model path here
-DATA_PATH = "Data"
 OUTPUT_DIR = "result"
-
-# Define generation arguments
-generation_config = GenerationConfig(
-    max_length=128,            
-    min_length=20,            
-    do_sample=True,            
-    num_beams=5,              
-    top_k=50,                  
-    top_p=0.9,                
-    temperature=0.7,           
-    early_stopping=True,       
-    repetition_penalty=1.2,    # 避免重複生成相同的短語
-    length_penalty=1.0         # 長度懲罰，較高值傾向於生成更長的句子
-)
-
 
 # Define training arguments
 training_args = Seq2SeqTrainingArguments(
-    seed=42,
     output_dir=OUTPUT_DIR,
     learning_rate=2e-5,
-    per_device_train_batch_size=32,
+    per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
-    num_train_epochs=10,
+    num_train_epochs=3,
     weight_decay=0.01,
-    remove_unused_columns=True,
+    seed=42,
     predict_with_generate=True,
-    generation_config=generation_config,
-    
-    eval_strategy="epoch",  # Evaluation strategy
-    save_strategy="epoch",  # Save strategy
-    report_to="none",  # Reporting strategy
-    
-    logging_steps=10,  # Logging steps
-    save_total_limit=2,  # Limit the total number of saved models
-    load_best_model_at_end=True,  # Load the best model at the end
+    generation_max_length=128,
+    generation_num_beams=5,
+    remove_unused_columns=True,
 )
 
 # Load data
-data_loader = Data(path_to_dir=DATA_PATH)
+data_loader = Data(path_to_dir='Data')
 hf_dataset = data_loader.load_data()
 print("Loaded Dataset:", hf_dataset)
 
@@ -67,27 +44,10 @@ dataset_dict = DatasetDict({
     "validation": val_test_dict["train"],
     "test": val_test_dict["test"],
 })
-print("Loaded DatasetDict: ", dataset_dict)
 
 # Tokenizer and Model Configuration
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_PATH)
 config = AutoConfig.from_pretrained(BASE_MODEL_PATH)
-
-if config.decoder_start_token_id is None:
-    config.decoder_start_token_id = tokenizer.bos_token_id
-    if config.decoder_start_token_id is None:
-        config.decoder_start_token_id = tokenizer.cls_token_id
-
-if config.bos_token_id is None:
-    config.bos_token_id = tokenizer.bos_token_id
-    if config.bos_token_id is None:
-        config.bos_token_id = tokenizer.cls_token_id
-
-if config.eos_token_id is None:
-    config.eos_token_id = tokenizer.eos_token_id
-    if config.eos_token_id is None:
-        config.eos_token_id = tokenizer.sep_token_id
-
 model = AutoModelForSeq2SeqLM.from_pretrained(BASE_MODEL_PATH, config=config)
 
 # Data preproccess: Preprocessing function
@@ -118,8 +78,6 @@ metric = evaluate.load("rouge")  # 对于生成任务，通常使用ROUGE指标
 
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
-    if isinstance(predictions, tuple):
-        predictions = predictions[0]
     decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
     decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
