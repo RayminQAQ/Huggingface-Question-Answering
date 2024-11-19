@@ -1,3 +1,9 @@
+"""
+To-dos:
+    1. 把模型的輸出抓下來 (看decode的結果好不好，如果不好的話要去看怎麼樣去修改decode strategy)
+    2. 用其他模型嘗試看看
+"""
+
 import os
 from transformers import (
     AutoTokenizer,
@@ -12,10 +18,15 @@ from datasets import DatasetDict
 from util import Data
 import numpy as np
 
+import wandb
+
+# Set environment variables for WandB project and CUDA device
+os.environ['WANDB_PROJECT'] = '101DATA'
+
 # Parameters
 BASE_MODEL_PATH = "fnlp/bart-base-chinese"  # Add your model path here
 DATA_PATH = "Data"
-OUTPUT_DIR = "result"
+OUTPUT_DIR = "result-test2"
 
 # Tokenizer and Model Configuration
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_PATH)
@@ -60,13 +71,17 @@ training_args = Seq2SeqTrainingArguments(
     predict_with_generate=True,
     generation_config=generation_config,
     
-    eval_strategy="steps",  # Evaluation strategy
-    save_strategy="steps",  # Save strategy
-    report_to="none",  # Reporting strategy
+    eval_strategy="steps",       # Evaluation strategy
+    eval_steps=500,              # Evaluate every 500 steps
+    save_strategy="steps",       # Save strategy
+    save_steps=500,              # Save model every 500 steps
+    logging_steps=100,           # Log training loss every 100 steps
+    report_to="wandb",           # Reporting strategy
+    save_total_limit=2,          # Limit the total number of saved checkpoints
     
-    logging_steps=500,  # Logging steps
-    save_total_limit=2,  # Limit the total number of saved models
     load_best_model_at_end=True,  # Load the best model at the end
+    metric_for_best_model="eval_loss",  # Metric to use for selecting the best model
+    greater_is_better=False,      # For eval_loss, lower is better
 )
 
 # Load data
@@ -145,13 +160,16 @@ trainer = Seq2SeqTrainer(
 )
 
 # Start Training
-train_result = trainer.train()
+trainer.train()
 
 # Save train result
 print(trainer.state.log_history)
-trainer.save_model()
+#trainer.save_model()
 
-metrics = train_result.metrics
-trainer.log_metrics("train", metrics)
-trainer.save_metrics("train", metrics)
-trainer.save_state()
+#metrics = train_result.metrics
+#trainer.log_metrics("train", metrics)
+#trainer.save_metrics("train", metrics)
+#trainer.save_state()
+
+# Finish the WandB run
+wandb.finish()
